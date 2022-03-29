@@ -1,0 +1,41 @@
+version: 0.2
+
+eb_codebuild_settings:
+  CodeBuildServiceRole: arn:aws:iam::080266302756:role/codebuild_eb_role
+  ComputeType: BUILD_GENERAL1_SMALL
+  Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+  Timeout: 10
+
+
+
+env:
+    variables:
+       AWS_DEFAULT_REGION: "eu-west-3"
+       AWS_ACCOUNT_ID: "080266302756"
+    parameter-store:
+       AWS_ECR_REPO: "/devops/AWS_ECR_REPO"
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR.....
+      - aws --version
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ECR_REPO
+      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build -t $REPOSITORY_URI:$IMAGE_TAG .
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Writing image definitions file...
+      - printf '[{"name":"nginx-webapp","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+artifacts:
+    files: 
+      - imagedefinitions.json
+      - index.html
